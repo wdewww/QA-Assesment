@@ -1,0 +1,13 @@
+[project]
+name = "qa-analyzer"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "beautifulsoup4>=4.14.3",
+    "fastapi[standard]>=0.129.0",
+    "playwright>=1.58.0",
+    "pydantic>=2.12.5",
+    "requests>=2.32.5",
+]
