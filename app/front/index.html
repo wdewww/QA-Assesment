@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QA Analyzer</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #f5f6fa;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+    }
+
+    .container {
+      background: #fff;
+      padding: 30px 40px;
+      border-radius: 12px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+      width: 100%;
+      max-width: 500px;
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 20px;
+      color: #2f3640;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: bold;
+      color: #2f3640;
+    }
+
+    input[type="text"], textarea {
+      width: 100%;
+      padding: 10px 12px;
+      margin-bottom: 15px;
+      border-radius: 6px;
+      border: 1px solid #dcdde1;
+      font-size: 14px;
+      resize: vertical;
+    }
+
+    .checkbox-group {
+      display: flex;
+      flex-direction: column;
+      margin-bottom: 15px;
+    }
+
+    .checkbox-group label {
+      font-weight: normal;
+      margin-bottom: 5px;
+    }
+
+    button {
+      width: 100%;
+      padding: 12px;
+      border: none;
+      background-color: #4cd137;
+      color: #fff;
+      font-size: 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+
+    button:hover {
+      background-color: #44bd32;
+    }
+
+    .status {
+      margin-top: 15px;
+      text-align: center;
+      font-size: 14px;
+      color: #718093;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <h1>QA Analyzer</h1>
+    <form id="qaForm">
+      <label for="url">Website URL</label>
+      <input type="text" id="url" name="url" placeholder="https://example.com" required>
+
+      <label>Dimensions</label>
+      <div class="checkbox-group">
+        <label><input type="checkbox" name="dimension" value="Security" checked> Security</label>
+        <label><input type="checkbox" name="dimension" value="UX & Accessibility" checked> UX & Accessibility</label>
+        <label><input type="checkbox" name="dimension" value="Technical Quality" checked> Technical Quality</label>
+        <label><input type="checkbox" name="dimension" value="Performance" checked> Performance</label>
+      </div>
+
+      <label for="setup_scripts">Optional Setup Scripts</label>
+      <textarea id="setup_scripts" name="setup_scripts" rows="4" placeholder="Enter setup scripts (optional)"></textarea>
+
+      <button type="submit">Generate PDF</button>
+      <div class="status" id="status"></div>
+    </form>
+  </div>
+
+  <script>
+    const form = document.getElementById('qaForm');
+    const statusDiv = document.getElementById('status');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      statusDiv.textContent = "Generating PDF, please wait...";
+
+      const url = document.getElementById('url').value;
+      const setup_scripts = document.getElementById('setup_scripts').value || null;
+
+      // Get all selected dimensions
+      const dimension = Array.from(document.querySelectorAll('input[name="dimension"]:checked'))
+                             .map(cb => cb.value);
+
+      try {
+        const response = await fetch('/api/1/generate', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ url, dimension, setup_scripts })
+        });
+
+        if (!response.ok) {
+          const errText = await response.text();
+          throw new Error(errText || 'Failed to generate PDF');
+        }
+
+        const blob = await response.blob();
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = 'qa_report.pdf';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(downloadUrl);
+
+        statusDiv.textContent = "PDF downloaded successfully!";
+
+      } catch (err) {
+        statusDiv.textContent = `Error: ${err.message}`;
+      }
+    });
+  </script>
+
+</body>
+</html>

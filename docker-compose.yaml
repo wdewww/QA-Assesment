@@ -1,0 +1,15 @@
+services:
+  qa-analyzer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: qa-analyzer
+    ports:
+      - "8000:8000"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    env_file:
+      - .env
+    volumes:
+      - ./reports:/app/reports
+    restart: unless-stopped
