@@ -10,7 +10,9 @@ from dimensions.technical import TechnicalQualityCalculator
 from dimensions.performance import PerformanceCalculator
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from pathlib import Path
 import os
+
 
 
 
@@ -42,11 +44,13 @@ report_generator = ReportGenerator()
 
 
 
-app.mount("/static", StaticFiles(directory="front"), name="static")
+BASE_DIR = Path(__file__).resolve().parent
+FRONT_DIR = BASE_DIR / "front"
 
+app.mount("/static", StaticFiles(directory=FRONT_DIR), name="static")
 @app.get("/")
 async def index():
-    return FileResponse(os.path.join("front", "index.html"))
+    return FileResponse(os.path.join(FRONT_DIR, "index.html"))
 
 @app.post("/api/1/generate")
 async def generate(payload: GenerateRequest):
