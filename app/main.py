@@ -81,7 +81,7 @@ async def generate(payload: GenerateRequest):
     try:
         snapshot = await page_fetcher.fetch(str(payload.url), payload.setup_scripts)
         metrics_dict = await qa_analyzer.analyze(snapshot=snapshot, dimensions=payload.dimension)
-        pdf_path = await report_generator.generate(url=str(payload.url), metrics=metrics_dict)
+        pdf_path = await report_generator.generate(url=snapshot.url, metrics=metrics_dict)
         
         return FileResponse(
             path=pdf_path,
@@ -97,7 +97,7 @@ async def generate(payload: GenerateRequest):
     try:
         snapshot = await page_fetcher.fetch(str(payload.url), payload.setup_scripts)
         metrics_dict = await qa_analyzer.analyze(snapshot=snapshot, dimensions=payload.dimension)
-        pdf_path = await report_generator.generate(url=str(payload.url), metrics=metrics_dict)
+        pdf_path = await report_generator.generate(url=snapshot.url, metrics=metrics_dict)
         
         return {
             "metrics": metrics_dict,
