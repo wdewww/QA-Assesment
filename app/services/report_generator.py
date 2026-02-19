@@ -36,24 +36,24 @@ class ReportGenerator:
             if dimension == "Security":
                 # Count positive security features
                 positives = sum([
-                    data.get('https_tls', False) or False,
-                    data.get('x_frame_options', False) or False,
-                    data.get('strict_transport_security', False) or False,
-                    data.get('csp', False) or False,
-                    data.get('x_content_type_options', False) or False,
-                    data.get('referrer_policy', False) or False,
-                    data.get('permissions_policy', False) or False,
+                    data.get('https_tls', False),
+                    data.get('x_frame_options', False),
+                    data.get('strict_transport_security', False),
+                    data.get('csp', False),
+                    data.get('x_content_type_options', False),
+                    data.get('referrer_policy', False),
+                    data.get('permissions_policy', False),
                 ])
                 negatives = sum([
-                    not data.get('cors_misconfig', True) or False,
-                    data.get('outdated_js', False) or False,
+                    not data.get('cors_misconfig', True),
+                    data.get('outdated_js', False),
                 ])
-                sri = data.get('sri_coverage', [0, 1]) or [0, 1]
+                sri = data.get('sri_coverage', [0, 1])
                 sri_score = sri[0] / sri[1] if sri[1] > 0 else 0
                 scored[dimension]['score'] = ((positives + sri_score - negatives) / 8) * 100
                 
             elif dimension == "UX & Accessibility":
-                issues = len(data.get('accessibility_issues', [])) or []
+                issues = len(data.get('accessibility_issues', []))
                 deductions = (
                     (5 if data.get('title_too_long', False) else 0) +
                     (10 if data.get('meta_description_missing', False) else 0) +
@@ -66,9 +66,9 @@ class ReportGenerator:
                 
             elif dimension == "Performance":
                 # Score based on thresholds
-                page_size = data.get('page_size_bytes', 0) or 0
-                ttfb = data.get('ttfb_ms', 0) or 0
-                tti = data.get('tti_ms', 0) or 0
+                page_size = data.get('page_size_bytes', 0)
+                ttfb = data.get('ttfb_ms', 0)
+                tti = data.get('tti_ms', 0)
                 
                 size_score = max(0, 100 - (page_size / 10000))  # Deduct for large pages
                 ttfb_score = max(0, 100 - (ttfb / 10))  # Good TTFB < 200ms
@@ -77,10 +77,10 @@ class ReportGenerator:
                 scored[dimension]['score'] = (size_score + ttfb_score + tti_score) / 3
                 
             elif dimension == "Technical Quality":
-                broken = data.get('broken_links', 0) or 0
-                total = data.get('total_links_checked', 1) or 0
-                missing_meta = len(data.get('missing_meta_tags', [])) or []
-                redirects = data.get('redirect_chain_length', 0) or 0
+                broken = data.get('broken_links', 0)
+                total = data.get('total_links_checked', 1)
+                missing_meta = len(data.get('missing_meta_tags', []))
+                redirects = data.get('redirect_chain_length', 0)
                 
                 deductions = (
                     (broken / total * 30 if total > 0 else 0) +
@@ -333,9 +333,10 @@ Do not include any markdown formatting, code blocks, or additional text."""
                     
                 if isinstance(value, bool):
                     value_str = "✓ Yes" if value else "✗ No"
-                elif isinstance(value, list):
+                elif isinstance(value, (list, tuple)):
                     if len(value) == 2 and all(isinstance(x, (int, float)) for x in value):
-                        value_str = f"{value[0]} of {value[1]}"
+                        percentage = (value[0] / value[1] * 100) if value[1] > 0 else 0
+                        value_str = f"{percentage:.1f}%"
                     elif value:
                         value_str = ", ".join(str(v) for v in value)
                     else:

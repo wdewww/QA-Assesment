@@ -86,8 +86,10 @@ def check_csp(headers: Dict[str, str]) -> Optional[bool]:
     except Exception:
         return None
 
-def check_secure_cookies(headers: Dict[str, str]) -> Optional[Tuple[int, int]]:
+def check_secure_cookies(headers: Dict[str, str]) -> Optional[tuple]:
     try:
+        print("Checking secure cookies...")
+        print("headers:", headers)
         total_cookies, secure_cookies = 0, 0
 
         if "set-cookie" in (h.lower() for h in headers.keys()):
@@ -101,11 +103,11 @@ def check_secure_cookies(headers: Dict[str, str]) -> Optional[Tuple[int, int]]:
                 if "Secure" in cookie and "HttpOnly" in cookie:
                     secure_cookies += 1
 
-        return total_cookies, secure_cookies
+        return (secure_cookies, total_cookies)
 
     except Exception:
         return None
-def calculate_sri_coverage(html: str) -> Optional[Tuple[int, int]]:
+def calculate_sri_coverage(html: str) -> Optional[tuple]:
     try:
         soup = BeautifulSoup(html, "html.parser")
         sri_count = 0
@@ -121,7 +123,7 @@ def calculate_sri_coverage(html: str) -> Optional[Tuple[int, int]]:
             if tag.get("integrity"):
                 sri_count += 1
 
-        return sri_count, external_count
+        return (sri_count, external_count)
 
     except Exception:
         return None
@@ -186,6 +188,9 @@ def calculate_broken_links(html: str, base_url: str) -> Tuple[Optional[int], Opt
         total_links = 0
 
         for a_tag in soup.find_all("a", href=True):
+            if total_links >= 50:  # limit to first 50 links for performance
+                break
+
             href = a_tag["href"]
 
             if href.startswith("javascript:") or href.startswith("#"):
