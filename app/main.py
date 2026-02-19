@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from schemas.generate import GenerateRequest, GenerateResponse
-from services.page_fetcher import PageFetcher
+from services.page_fetcher import AgenticPageFetcher, PageFetcher
 from services.qa_analyzer import QAAnalyzer
 from services.report_generator import ReportGenerator
 from dimensions.security import SecurityCalculator
@@ -12,6 +12,17 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 import os
+
+
+from langchain.agents import create_agent
+# Avoid importing langchain.tools.Tool which may not exist in your installed langchain
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_community.tools.playwright.utils import (
+    create_async_playwright_browser,  # A synchronous browser is available, though it isn't compatible with jupyter.\n",   },
+)
+from langchain_community.agent_toolkits import PlayWrightBrowserToolkit
+from langchain_openai import ChatOpenAI
+from playwright.async_api import async_playwright
 
 
 
@@ -30,7 +41,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-page_fetcher = PageFetcher()
+page_fetcher = AgenticPageFetcher()
 qa_analyzer = QAAnalyzer(
     security_calculator= SecurityCalculator(),
     performance_calculator=PerformanceCalculator(),
@@ -46,6 +57,19 @@ report_generator = ReportGenerator()
 
 BASE_DIR = Path(__file__).resolve().parent
 FRONT_DIR = BASE_DIR / "front"
+
+
+
+@app.on_event("startup")
+async def startup_event():
+    app.state.playwright = await async_playwright().start()
+    app.state.browser = await app.state.playwright.chromium.launch(headless=True)
+    app.state.toolkit = PlayWrightBrowserToolkit.from_browser(
+        async_browser=app.state.browser
+    )
+    app.state.tools = app.state.toolkit.get_tools()
+
+
 
 app.mount("/static", StaticFiles(directory=FRONT_DIR), name="static")
 @app.get("/")

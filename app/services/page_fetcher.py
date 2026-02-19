@@ -1,25 +1,26 @@
 import httpx
 import asyncio
 from bs4 import BeautifulSoup
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Callable, Any
 from dataclasses import dataclass
 from exceptions.exceptions import (
-                                    PageUnreachableException,
-                                    PageTimeoutException,
-                                    HTTPErrorException,
-                                    UnsupportedContentTypeException,
-                                    EmptyResponseException,
-                                    DOMParsingException,
-                                )
-from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
-
-from langchain.agents import initialize_agent, AgentType
-from langchain.tools import Tool
-from langchain.chat_models import ChatOpenAI
-from langchain_community.agent_toolkits.playwright.toolkit import PlayWrightBrowserToolkit
-
-
-
+    PageUnreachableException,
+    PageTimeoutException,
+    HTTPErrorException,
+    UnsupportedContentTypeException,
+    EmptyResponseException,
+    DOMParsingException,
+)
+# Use create_agent (newer langchain) — you already import it without error
+from langchain.agents import create_agent
+# Avoid importing langchain.tools.Tool which may not exist in your installed langchain
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_community.tools.playwright.utils import (
+    create_async_playwright_browser,  # A synchronous browser is available, though it isn't compatible with jupyter.\n",   },
+)
+from langchain_community.agent_toolkits import PlayWrightBrowserToolkit
+from langchain_openai import ChatOpenAI
+from playwright.async_api import async_playwright
 
 @dataclass
 class PageSnapshot:
@@ -31,28 +32,30 @@ class PageSnapshot:
 
 
 class PageFetcher:
-
-    async def fetch(self, url : str, setup_scripts=None):
+    async def fetch(self, url: str, setup_scripts=None):
         # assuming url is correct because of pydantic validation
         try:
-            async with httpx.AsyncClient(follow_redirects=True, headers={
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/120.0.0.0 Safari/537.36" 
-            )}
-        ) as client:
+            async with httpx.AsyncClient(
+                follow_redirects=True,
+                headers={
+                    "User-Agent": (
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/120.0.0.0 Safari/537.36"
+                    )
+                },
+            ) as client:
                 response = await client.get(url)
-        except httpx.ConnectError: # Tested http://localhost:4000
+        except httpx.ConnectError:  # Tested http://localhost:4000
             raise PageUnreachableException(f"Unable to reach: {url}")
         except httpx.ReadTimeout:  # https://httpbin.org/delay/10
             raise PageTimeoutException(f"Timeout while fetching: {url}")
         except httpx.RequestError:
             raise PageUnreachableException(f"Request failed for: {url}")
-        
+
         if response.status_code >= 400:  # https://httpbin.org/status/404
             raise HTTPErrorException(response.status_code)
-        
+
         content_type = response.headers.get("content-type", "")
         if "text/html" not in content_type:  # https://httpbin.org/json
             raise UnsupportedContentTypeException(
@@ -60,37 +63,34 @@ class PageFetcher:
             )
         html = response.text.strip()
         if not html:
-            raise EmptyResponseException("Empty response body") # https://httpbin.org/status/204
-        
+            raise EmptyResponseException("Empty response body")  # https://httpbin.org/status/204
+
         try:
             dom = BeautifulSoup(html, "html.parser")
         except Exception:
             raise DOMParsingException("Failed to parse DOM")
-        
 
         return PageSnapshot(
-            url = str(response.url),
+            url=str(response.url),
             status_code=response.status_code,
-            headers = dict(response.headers),
-            html = html,
-            dom = dom,
+            headers=dict(response.headers),
+            html=html,
+            dom=dom,
         )
 
-        
-    async def _setup_page(self, url : str, setup_scripts : str | List[str]):
-        pass
-
+    async def _setup_page(self, url: str, setup_scripts: Union[str, List[str]]):
+        # placeholder for any future non-agent setup logic
+        raise NotImplementedError
 
 
 class AgenticPageFetcher:
-
     def __init__(
         self,
-        llm: Optional[ChatOpenAI] = None,
+        llm=None,
         headless: bool = True,
         navigation_timeout: int = 15000,
     ):
-        self.llm = llm or ChatOpenAI(temperature=0)
+        self.llm = llm or ChatOpenAI(model="stepfun/step-3.5-flash:free")
         self.headless = headless
         self.navigation_timeout = navigation_timeout
 
@@ -100,93 +100,58 @@ class AgenticPageFetcher:
         setup_instructions: Optional[Union[str, List[str]]] = None,
     ) -> PageSnapshot:
 
+        status_code = None
+        headers = {}
+        html = None
+        final_url = url
+
         try:
             async with async_playwright() as p:
-                browser = await p.chromium.launch(headless=self.headless)
-                page = await browser.new_page()
-                try:
-                    response = await page.goto(
-                        url,
-                        timeout=self.navigation_timeout,
-                        wait_until="domcontentloaded",
-                    )
 
-                    if response is None:
-                        raise PageUnreachableException(
-                            f"No response received from {url}"
-                        )
+                browser = await p.chromium.launch()
+                context = await browser.new_context()
+                page = await context.new_page()
 
+                # Create toolkit with existing page
+                toolkit = PlayWrightBrowserToolkit.from_browser(
+                    async_browser=browser
+                )
+                tools = toolkit.get_tools()
+
+                agent_chain = create_agent(
+                    model=self.llm,
+                    tools=tools,
+                )
+
+                # Let the agent manipulate the browser
+                result = await agent_chain.ainvoke(
+                    {
+                        "messages": [
+                            (
+                                "user",
+                                f"Navigate to {url}. "
+                                f"Then perform: {setup_instructions}"
+                            )
+                        ]
+                    }
+                )
+                for msg in result["messages"]:
+                    print("=" * 50)
+                    print(type(msg).__name__)
+                    print(msg.content)
+                    if hasattr(msg, "tool_calls") and msg.tool_calls:
+                        print("Tool calls:", msg.tool_calls)
+                final_url = page.url
+                html = await page.content()
+                response = await page.goto(final_url)
+                if response:
                     status_code = response.status
                     headers = response.headers
 
-                    if status_code >= 400:
-                        raise HTTPErrorException(status_code)
-
-                except PlaywrightTimeoutError:
-                    raise PageTimeoutException(
-                        f"Timeout while loading {url}"
-                    )
-
-                if setup_instructions:
-
-                    if isinstance(setup_instructions, list):
-                        setup_instructions = "\n".join(setup_instructions)
-
-                    toolkit = PlayWrightBrowserToolkit.from_browser(page)
-                    tools = toolkit.get_tools()
-
-                    snapshot_tool = Tool(
-                        name="return_snapshot",
-                        description=(
-                            "Call this tool when all required actions "
-                            "have been completed and the page is ready."
-                        ),
-                        func=lambda _: "SNAPSHOT_READY",
-                    )
-
-                    tools.append(snapshot_tool)
-
-                    agent = initialize_agent(
-                        tools=tools,
-                        llm=self.llm,
-                        agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
-                        verbose=False,
-                    )
-
-                    prompt = f"""
-                    You are controlling a real browser.
-
-                    The page is already loaded at: {url}
-
-                    Execute the following instructions carefully:
-
-                    {setup_instructions}
-
-                    When the page is fully prepared and ready for analysis,
-                    call the tool: return_snapshot
-                    """
-
-                    await asyncio.to_thread(agent.run, prompt)
-
-                await page.wait_for_load_state("networkidle")
-
-                html = await page.content()
-
-                final_url = page.url
-
                 await browser.close()
 
-        except PageTimeoutException:
-            raise
-
-        except HTTPErrorException:
-            raise
-
         except Exception as e:
-            raise PageUnreachableException(str(e))
-
-        if not html:
-            raise DOMParsingException("Empty HTML content after execution")
+            raise e
 
         try:
             dom = BeautifulSoup(html, "html.parser")
@@ -195,7 +160,7 @@ class AgenticPageFetcher:
 
         return PageSnapshot(
             url=final_url,
-            status_code=status_code,
+            status_code=status_code or 0,
             headers=headers,
             html=html,
             dom=dom,

@@ -333,9 +333,10 @@ Do not include any markdown formatting, code blocks, or additional text."""
                     
                 if isinstance(value, bool):
                     value_str = "✓ Yes" if value else "✗ No"
-                elif isinstance(value, list):
+                elif isinstance(value, (list, tuple)):
                     if len(value) == 2 and all(isinstance(x, (int, float)) for x in value):
-                        value_str = f"{value[0]} of {value[1]}"
+                        percentage = (value[0] / value[1] * 100) if value[1] > 0 else 0
+                        value_str = f"{percentage:.1f}%"
                     elif value:
                         value_str = ", ".join(str(v) for v in value)
                     else:
